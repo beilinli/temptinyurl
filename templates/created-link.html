@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="">
+	<meta name="author" content="Beilin Li">
+
+	<title>TempURL</title>
+
+	<link href="{{ url_for('static', filename = 'style.css') }}" rel="stylesheet">
+</head>
+
+<body>
+	Link for <b>{{ original_url }}</b> available <a href="/link/{{ alias }}">here</a>
+	for <b>{{ duration }}</b>.
+</body>
+
+</html>
