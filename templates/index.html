@@ -12,7 +12,7 @@
 </head>
 
 <body>
-	<form action="/create" method="POST">
+	<form action="/create" name="create-link" onsubmit="return validateForm()">
 		Enter original URL: <input type="text" name="url">
 		<br>
 		Enter custom alias: <input type="text" name="alias">
@@ -21,6 +21,8 @@
 		<br><br>
 		<input type="submit">
 	</form>
-</body>
 
+	<script type="text/javascript" src="{{ url_for('static', filename = 'form.js') }}">
+	</script>
+</body>
 </html>

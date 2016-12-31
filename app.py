@@ -24,18 +24,31 @@ def link(alias):
 	con.close()
 
 	if url is None:
-		return render_template('404.html'), 404
+		return render_template(
+			'error.html',
+			msg = 'There is no tiny link with that alias. ' \
+			'Please check the URL or create a link on the homepage.'
+		), 404
 
 	return redirect(url[0])
 
-@app.route('/create', methods=['POST'])
+@app.route('/create')
 def create_tiny():
 	con = sqlite3.connect(DB_NAME)
 	cur = con.cursor()
 
-	original_url = request.form.get('url')
-	alias = request.form.get('alias')
+	original_url = request.args.get('url')
+	alias = request.args.get('alias')
 
+	# check duplicates
+	cur.execute('SELECT * FROM links WHERE alias = ?', (alias,))
+	if (cur.fetchone() is not None):
+		return render_template(
+			'error.html',
+			msg = 'The alias you\'ve chosen is not available. Please try another one.'
+		), 400
+
+	# create tiny URL
 	cur.execute('INSERT INTO links (alias, url) VALUES (?, ?)', (alias, original_url))
 
 	con.commit()
@@ -50,7 +63,10 @@ def create_tiny():
 
 @app.errorhandler(404)
 def page_not_found(e):
-	return render_template('404.html'), 404
+	return render_template(
+		'error.html',
+		msg = 'Page not found!'
+	), 404
 
 if __name__ == '__main__':
 	app.run(debug = True)
