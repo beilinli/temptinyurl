@@ -1,5 +1,4 @@
-/* filler style */
-
-* {
-	color: black;
+#duration {
+	display: none;
+	width: 60px;
 }

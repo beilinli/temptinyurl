@@ -1,5 +1,15 @@
+var form = document.forms["create-link"];
+
+function durationOther() {
+  console.log(form["select-duration"].value);
+  if (!form["select-duration"].value) {
+    document.getElementById("duration").style.display = "inline";
+  } else {
+    document.getElementById("duration").style.display = "none";
+  }
+}
+
 function validateForm() {
-  var form = document.forms["create-link"];
   var url = form["url"].value;
   var alias = form["alias"].value;
 

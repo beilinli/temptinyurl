@@ -17,7 +17,16 @@
 		<br>
 		Enter custom alias: <input type="text" name="alias">
 		<br>
-		Enter duration: <input type="number" step="1" name="duration">
+		Enter duration:
+		<select name="select-duration" onchange="durationOther()">
+			<option value="5">5 minutes</option>
+			<option value="30">30 minutes</option>
+			<option value="120">2 hours</option>
+			<option value="360">6 hours</option>
+			<option value="1440">24 hours</option>
+			<option value="">Other</option>
+		</select>
+		<input type="number" step="1" min="1" max="1440" id="duration" name="duration" placeholder="minutes">
 		<br><br>
 		<input type="submit">
 	</form>
