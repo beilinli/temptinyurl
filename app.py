@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, url_for
-import sqlite3, sched, time
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import atexit, sqlite3, time
 
 # app info
 
@@ -7,20 +9,23 @@ app = Flask(__name__)
 app.secret_key = "%\xde\xe0\x1bjT\x9bS\xe9\x9at'\xf6\x9f'^3\x10F\xf3\x8f7\xadD"
 
 DB_NAME = 'database.db'
-DEFAULT_DURATION = 30
-DB_CLEAR_INTERVAL = 60
+DEFAULT_DURATION = 30   # minutes
+DB_CLEAR_INTERVAL_HRS = 6   # hours
 
-# delete old URLs from DB
+'''
+clear old URL info
+'''
 
-proc = sched.scheduler(time.time, time.sleep)
-def clear_old_links(sc):
-	# TODO: delete the links
-	proc.enter(DB_CLEAR_INTERVAL, 1, clear_old_links, (sc,))
+def clear_db_old():
+    con = sqlite3.connect(DB_NAME)
+    cur = con.cursor()
+    cur.execute('DELETE FROM links WHERE CURRENT_TIMESTAMP > expires')
+    con.commit()
+    con.close()
 
-proc.enter(DB_CLEAR_INTERVAL, 1, clear_old_links, (sc,))
-proc.run()
-
-# views
+'''
+views
+'''
 
 @app.route('/')
 def index():
@@ -32,7 +37,7 @@ def link(alias):
 	con = sqlite3.connect(DB_NAME)
 	cur = con.cursor()
 
-	cur.execute('SELECT url FROM links WHERE alias = ?', (alias,))
+	cur.execute('SELECT url FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
 	url = cur.fetchone()
 	con.close()
 
@@ -60,8 +65,8 @@ def create_tiny():
 	print("Duration is %d minutes" % duration)
 
 	# check duplicates
-	# TODO: check if link is current
-	cur.execute('SELECT * FROM links WHERE alias = ?', (alias,))
+	cur.execute('SELECT * FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
+
 	if (cur.fetchone() is not None):
 		return render_template(
 			'error.html',
@@ -69,8 +74,8 @@ def create_tiny():
 		), 400
 
 	# create tiny URL
-	cur.execute('INSERT INTO links (alias, url, duration) VALUES (?, ?, ?)',
-		(alias, original_url, duration))
+	cur.execute('INSERT INTO links (alias, url, expires) VALUES (?, ?, ' \
+    'DATETIME("now", "+" || ? || " minutes"))', (alias, original_url, duration,))
 
 	con.commit()
 	con.close()
@@ -91,4 +96,16 @@ def page_not_found(e):
 	), 404
 
 if __name__ == '__main__':
+	# schedule DB cleans every 6 hours
+	db_clear_sched = BackgroundScheduler()
+	db_clear_sched.start()
+	db_clear_sched.add_job(
+    	func = clear_db_old,
+    	trigger = IntervalTrigger(hours = DB_CLEAR_INTERVAL_HRS),
+    	replace_existing = True)
+
+    # set DB clear process to shutdown with app
+	atexit.register(lambda: db_clear_sched.shutdown())
+
+    # start server
 	app.run(debug = True)
