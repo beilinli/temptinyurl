@@ -29,83 +29,86 @@ views
 
 @app.route('/')
 def index():
-	return render_template('index.html')
+    return render_template('index.html')
 
 # utilize short link
 @app.route('/link/<alias>')
 def link(alias):
-	con = sqlite3.connect(DB_NAME)
-	cur = con.cursor()
+    con = sqlite3.connect(DB_NAME)
+    cur = con.cursor()
 
-	cur.execute('SELECT url FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
-	url = cur.fetchone()
-	con.close()
+    cur.execute('SELECT url FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
+    url = cur.fetchone()
+    con.close()
 
-	if url is None:
-		return render_template(
-			'error.html',
-			msg = 'There is no tiny link with that alias. ' \
-			'Please check the URL or create a link on the homepage.'
-		), 404
+    if url is None:
+        return render_template(
+            'error.html',
+            msg = 'There is no tiny link with that alias. ' \
+            'Please check the URL or create a link on the homepage.'
+        ), 404
 
-	# TODO: check if link is current
-	return redirect(url[0])
+    # TODO: check if link is current
+    return redirect(url[0])
 
 # create short link
 @app.route('/create')
 def create_tiny():
-	con = sqlite3.connect(DB_NAME)
-	cur = con.cursor()
+    print(session)
 
-	original_url = request.args.get('url')
-	alias = request.args.get('alias')
-	duration = int(request.args.get('select-duration')
-		or request.args.get('duration') or DEFAULT_DURATION) # minutes
+    con = sqlite3.connect(DB_NAME)
+    cur = con.cursor()
 
-	print("Duration is %d minutes" % duration)
+    original_url = request.args.get('url')
+    alias = request.args.get('alias')
+    duration = int(request.args.get('select-duration')
+        or request.args.get('duration') or DEFAULT_DURATION) # minutes
 
-	# check duplicates
-	cur.execute('SELECT * FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
+    print("Duration is %d minutes" % duration)
 
-	if (cur.fetchone() is not None):
-		return render_template(
-			'error.html',
-			msg = 'The alias you\'ve chosen is not available. Please try another one.'
-		), 400
+    # check duplicates
+    cur.execute('SELECT * FROM links WHERE alias = ? AND CURRENT_TIMESTAMP < expires', (alias,))
 
-	# create tiny URL
-	cur.execute('INSERT INTO links (alias, url, expires) VALUES (?, ?, ' \
+    if cur.fetchone() is not None:
+        return render_template(
+            'error.html',
+            msg = 'The alias you\'ve chosen is not available. Please try another one.'
+        ), 400
+
+    # create tiny URL
+    cur.execute('INSERT INTO links (alias, url, expires) VALUES (?, ?, ' \
     'DATETIME("now", "+" || ? || " minutes"))', (alias, original_url, duration,))
 
-	con.commit()
-	con.close()
+    con.commit()
+    con.close()
 
-	return render_template(
-		'created-link.html',
-		original_url = original_url,
-		alias = alias,
-		duration = "%d minutes" % duration
-	)
+    return render_template(
+        'created-link.html',
+        original_url = original_url,
+        alias = alias,
+        duration = "%d minutes" % duration
+    )
 
 # error redirect
 @app.errorhandler(404)
 def page_not_found(e):
-	return render_template(
-		'error.html',
-		msg = 'Page not found!'
-	), 404
+    return render_template(
+        'error.html',
+        msg = 'Page not found!'
+    ), 404
 
 if __name__ == '__main__':
-	# schedule DB cleans every 6 hours
-	db_clear_sched = BackgroundScheduler()
-	db_clear_sched.start()
-	db_clear_sched.add_job(
-    	func = clear_db_old,
-    	trigger = IntervalTrigger(hours = DB_CLEAR_INTERVAL_HRS),
-    	replace_existing = True)
+    # schedule DB cleans every 6 hours
+    db_clear_sched = BackgroundScheduler()
+    db_clear_sched.start()
+    db_clear_sched.add_job(
+        func = clear_db_old,
+        trigger = IntervalTrigger(hours = DB_CLEAR_INTERVAL_HRS),
+        replace_existing = True
+    )
 
     # set DB clear process to shutdown with app
-	atexit.register(lambda: db_clear_sched.shutdown())
+    atexit.register(lambda: db_clear_sched.shutdown())
 
     # start server
-	app.run(debug = True)
+    app.run(debug = True)
