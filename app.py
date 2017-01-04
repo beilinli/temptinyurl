@@ -11,7 +11,8 @@ app.secret_key = "%\xde\xe0\x1bjT\x9bS\xe9\x9at'\xf6\x9f'^3\x10F\xf3\x8f7\xadD"
 DB_NAME = 'database.db'
 DEFAULT_DURATION = 30   # minutes
 DB_CLEAR_INTERVAL_HRS = 6   # hours
-COOKIE_TIME = 120 # minutes
+COOKIE_TIME = 1 # days
+# NOTE: Chrome cookies expire too early
 
 '''
 clear old URL and cookie info
@@ -31,7 +32,13 @@ views
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    con = sqlite3.connect(DB_NAME)
+    cur = con.cursor()
+    cur.execute('SELECT * from links WHERE cookie_id = ?', (request.cookies.get('id'),))
+    links = cur.fetchall()
+    con.close()
+
+    return render_template('index.html', links = links)
 
 # utilize short link
 @app.route('/link/<alias>')
@@ -85,7 +92,7 @@ def create_tiny():
     # set cookie
     cookie_id = request.cookies.get('id')
     if not cookie_id:
-        cookie_expires = datetime.datetime.now() + datetime.timedelta(minutes
+        cookie_expires = datetime.datetime.now() + datetime.timedelta(days
         = COOKIE_TIME)
         cur.execute('INSERT INTO cookies (expires) VALUES (?)', (cookie_expires,))
         cookie_id = str(cur.lastrowid)

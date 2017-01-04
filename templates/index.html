@@ -31,6 +31,21 @@
 		<input type="submit">
 	</form>
 
+    <table>
+        <tr>
+            <th>Alias</th>
+            <th>URL</th>
+            <th>Expires</th>
+        </tr>
+        {% for link in links %}
+        <tr>
+            <td>{{ link[0] }}</td>
+            <td>{{ link[1] }}</td>
+            <td>{{ link[2] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
 	<script type="text/javascript" src="{{ url_for('static', filename = 'form.js') }}">
 	</script>
 </body>
