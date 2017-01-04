@@ -1,7 +1,6 @@
 var form = document.forms["create-link"];
 
 function durationOther() {
-  console.log(form["select-duration"].value);
   if (!form["select-duration"].value) {
     document.getElementById("duration").style.display = "inline";
   } else {
