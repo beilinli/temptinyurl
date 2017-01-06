@@ -1,40 +1,93 @@
-from flask import Flask, make_response, render_template, request, redirect, session, url_for
+from flask import Flask, make_response, render_template, request, redirect, url_for
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-import atexit, sqlite3, time, datetime
+import atexit, sqlite3, time, datetime, sys
 
 # app info
 
 app = Flask(__name__)
-app.secret_key = "%\xde\xe0\x1bjT\x9bS\xe9\x9at'\xf6\x9f'^3\x10F\xf3\x8f7\xadD"
+app.config.from_object(__name__)
 
-DB_NAME = 'database.db'
-DEFAULT_DURATION = 30   # minutes
-DB_CLEAR_INTERVAL_HRS = 6   # hours
-COOKIE_TIME = 1 # days
+app.config.update(dict(
+    DB_NAME = 'database.db',
+    DEFAULT_DURATION = 30,  # minutes
+    DB_CLEAR_INTERVAL_HRS = 6,  # hours
+    COOKIE_TIME = 1     # days
+))
 # NOTE: Chrome cookies expire too early
 
 '''
-clear old URL and cookie info
+database functions
 '''
 
+def sched_clean_db():
+    # schedule DB cleans every 6 hours
+    db_clear_sched = BackgroundScheduler()
+    db_clear_sched.start()
+    db_clear_sched.add_job(
+        func = clear_db_old,
+        trigger = IntervalTrigger(hours = app.config['DB_CLEAR_INTERVAL_HRS']),
+        replace_existing = True
+    )
+
+    # set DB clear process to shutdown with app
+    atexit.register(lambda: db_clear_sched.shutdown())
+
+def init_db():
+    con = sqlite3.connect(app.config['DB_NAME'])
+    with app.open_resource('schema.sql', mode='r') as f:
+        con.cursor().executescript(f.read())
+    con.commit()
+    con.close()
+
 def clear_db_old():
-    con = sqlite3.connect(DB_NAME)
+    con = sqlite3.connect(app.config['DB_NAME'])
     cur = con.cursor()
-    cur.execute('DELETE FROM links WHERE ? > expires', (datetime.datetime.now(),))
-    cur.execute('DELETE FROM cookies WHERE ? > expires', (datetime.datetime.now(),))
+    cur.execute('delete from links where ? > expires', (datetime.datetime.now(),))
+    cur.execute('delete from cookies where ? > expires', (datetime.datetime.now(),))
+    con.commit()
+    con.close()
+
+def get_current_url(alias):
+    con = sqlite3.connect(app.config['DB_NAME'])
+    cur = con.cursor()
+    cur.execute('select url from links where alias = ? and ? < expires',
+    (alias, datetime.datetime.now(),))
+    url = cur.fetchone()
+    con.close()
+    return url
+
+def add_cookie():
+    con = sqlite3.connect(app.config['DB_NAME'])
+    cur = con.cursor()
+
+    cookie_expires = datetime.datetime.now() + datetime.timedelta(days
+    = app.config['COOKIE_TIME'])
+    cur.execute('insert into cookies (expires) values (?)', (cookie_expires,))
+    cookie_id = str(cur.lastrowid)
+    con.commit()
+    con.close()
+
+    return (cookie_id, cookie_expires)
+
+def add_link(alias, original_url, duration, cookie_id):
+    con = sqlite3.connect(app.config['DB_NAME'])
+    cur = con.cursor()
+    cur.execute('insert into links (alias, url, expires, cookie_id) values' \
+    '(?, ?, ?, ?)', (alias, original_url, datetime.datetime.now() +
+    datetime.timedelta(minutes = duration), cookie_id,))
     con.commit()
     con.close()
 
 '''
-views
+view functions
 '''
 
 @app.route('/')
 def index():
-    con = sqlite3.connect(DB_NAME)
+    con = sqlite3.connect(app.config['DB_NAME'])
     cur = con.cursor()
-    cur.execute('SELECT * from links WHERE cookie_id = ?', (request.cookies.get('id'),))
+    cur.execute('select * from links where cookie_id = ?', (request.cookies.get('id'),))
     links = cur.fetchall()
     con.close()
 
@@ -43,40 +96,26 @@ def index():
 # utilize short link
 @app.route('/link/<alias>')
 def link(alias):
-    con = sqlite3.connect(DB_NAME)
-    cur = con.cursor()
-
-    cur.execute('SELECT url FROM links WHERE alias = ? AND ? < expires',
-    (alias, datetime.datetime.now(),))
-    url = cur.fetchone()
-
-    con.close()
-
+    url = get_current_url(alias)
     if url is None:
         return render_template(
             'error.html',
-            msg = 'There is no tiny link with that alias. ' \
-            'Please check the URL or create a link on the homepage.'
-        ), 404
+        msg = 'There is no tiny link with that alias. ' \
+        'Please check the URL or create a link on the homepage.'
+    ), 404
 
     return redirect(url[0])
 
 # create short link
 @app.route('/create')
 def create_tiny():
-    con = sqlite3.connect(DB_NAME)
-    cur = con.cursor()
-
     original_url = request.args.get('url')
     alias = request.args.get('alias')
     duration = int(request.args.get('select-duration')
-        or request.args.get('duration') or DEFAULT_DURATION) # minutes
+        or request.args.get('duration') or app.config['DEFAULT_DURATION'])
 
     # check duplicates
-    cur.execute('SELECT * FROM links WHERE alias = ? AND ? < expires', (alias,
-    datetime.datetime.now(),))
-
-    if cur.fetchone() is not None:
+    if get_current_url(alias) is not None:
         return render_template(
             'error.html',
             msg = 'The alias you chose is unavailable. Please try another one.'
@@ -86,26 +125,16 @@ def create_tiny():
         'created-link.html',
         original_url = original_url,
         alias = alias,
-        duration = "%d minutes" % duration
+        duration = '%d minutes' % duration
     ))
 
     # set cookie
     cookie_id = request.cookies.get('id')
     if not cookie_id:
-        cookie_expires = datetime.datetime.now() + datetime.timedelta(days
-        = COOKIE_TIME)
-        cur.execute('INSERT INTO cookies (expires) VALUES (?)', (cookie_expires,))
-        cookie_id = str(cur.lastrowid)
+        (cookie_id, cookie_expires) = add_cookie()
         res.set_cookie('id', cookie_id, expires = cookie_expires)
 
-    # create tiny URL
-    cur.execute('INSERT INTO links (alias, url, expires, cookie_id) VALUES' \
-    '(?, ?, ?, ?)', (alias, original_url, datetime.datetime.now() +
-    datetime.timedelta(minutes = duration), cookie_id,))
-
-    con.commit()
-    con.close()
-
+    add_link(alias, original_url, duration, cookie_id)
     return res
 
 # error redirect
@@ -117,17 +146,7 @@ def page_not_found(e):
     ), 404
 
 if __name__ == '__main__':
-    # schedule DB cleans every 6 hours
-    db_clear_sched = BackgroundScheduler()
-    db_clear_sched.start()
-    db_clear_sched.add_job(
-        func = clear_db_old,
-        trigger = IntervalTrigger(hours = DB_CLEAR_INTERVAL_HRS),
-        replace_existing = True
-    )
-
-    # set DB clear process to shutdown with app
-    atexit.register(lambda: db_clear_sched.shutdown())
-
-    # start server
+    sched_clean_db()
+    if '-init-db' in sys.argv:
+        init_db()
     app.run(debug = True)

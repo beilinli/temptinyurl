@@ -1,5 +1,7 @@
-Generates temporary custom-shortened URLs.
-
-Usage:
+## Usage
 - Provide URLs in HTTP(S) or FTP format.
-- Aliases can contain letters, numbers, and dashes.
+- Provide aliases consisting of letters, numbers, and dashes.
+
+## Development
+- Run app: `python3 app.py [-init-db]`
+- Run tests: `python3 -m unittest tests.py`
